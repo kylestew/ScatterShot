@@ -25,7 +25,9 @@ function resetCanvas() {
 function normalizeCanvas() {
   ctx.translate(canvasXOff, canvasYOff);
   ctx.scale(canvasScale, canvasScale);
-  ctx.strokeWidth(8.0);
+  ctx.translate(1, 1);
+  ctx.scale(1, -1);
+  ctx.strokeWidth(1.0);
   ctx.lineJoin = "round";
 }
 
@@ -45,10 +47,10 @@ function init() {
     document.body.appendChild(stats.dom);
   }
 
-  function mainLoop() {
+  function mainLoop(time) {
     if (stats) stats.begin();
 
-    update();
+    update(time);
 
     ctx.fillStyle = settings.clearColor || "white";
     ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);

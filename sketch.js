@@ -1,57 +1,53 @@
+import { circle, asPolygon } from "@thi.ng/geom";
+import { sub } from "@thi.ng/vectors";
+import { rayMarch } from "./lib/ray_march";
+import { Ray } from "./lib/ray";
+import * as dx from "./snod/drawer";
+
 const settings = {
   // animated: true,
   clearColor: "black",
 };
 
-const random = (min, max) => Math.random() * (max - min) + min;
+// 1) Create a CIRCLE
+let circ = circle([0.0, 0.0], 0.2);
 
-const count = 1000;
+// 2) Create N points of light
+let lights = [{ pt: [0.6, 0.4], cd: [1, 0, 0, 1] }];
 
-const circles = Array.from(new Array(count)).map(() => {
-  const arcStart = Math.PI * 2 - random(0, (Math.PI * 2) / 3);
-  const arcLength = random(-0.1, 0.3) * Math.PI * 2;
-  const segmentCount = Math.floor(random(5, 200));
-  const spread = 0.085;
-  return {
-    segments: Array.from(new Array(segmentCount)).map(() => random(0, 1)),
-    arcStart,
-    arcEnd: arcStart + arcLength,
-    arcLength,
-    thickness: random(0.01, 1),
-    alpha: random(0.25, 0.5),
-    radius: random(0.1, 0.75),
-    x: 1.0 + random(-1, 1) * spread,
-    y: 1.0 + random(-1, 1) * spread,
-  };
+// 3) Fire rays from point lights in all directions
+// a) draw rays in color of light
+// b) bounce rays that collide with CIRCLE and pick up their color
+
+let light = lights[0];
+let poly = asPolygon(circle(light.pt, 0.2), 36);
+let rays = poly.points.map((pt) => {
+  return Ray(light.pt, sub([], pt, light.pt));
 });
+
+console.log(rays[0].dir, rays[0].orig);
+console.log(rays[1].dir, rays[1].orig);
+console.log(rays[2].dir, rays[2].orig);
+console.log(rays[3].dir, rays[3].orig);
+
+let lines = rays.map((ray) => {
+  let rec = rayMarch(ray);
+  console.log(rec);
+  let line = ray.lineTo(rec.dist);
+  return line;
+});
+console.log(lines);
 
 function update() {}
 
 function render({ ctx, canvasScale }) {
-  ctx.globalCompositeOperation = "source-over";
+  ctx.strokeStyle = "white";
 
-  const globalThickness = 4.0 * canvasScale;
+  dx.circle(ctx, circ.pos, circ.r);
 
-  circles.forEach((circle) => {
-    ctx.globalCompositeOperation = "lighter";
-    circle.segments.forEach((t) => {
-      const angle = circle.arcStart + circle.arcLength * t;
-      const radius = circle.radius * random(-1, 1) * 0.5;
-      const x = circle.x + Math.cos(angle) * radius;
-      const y = circle.y + Math.sin(angle) * radius;
-      ctx.beginPath();
-      ctx.arc(
-        x,
-        y,
-        circle.thickness * random(0.5, 1.25) * globalThickness,
-        0,
-        Math.PI * 2,
-        false
-      );
-      ctx.fill();
-      ctx.closePath();
-      ctx.globalAlpha = circle.alpha;
-    });
+  lines.forEach((line) => {
+    let [a, b] = line.points;
+    dx.line(ctx, a, b);
   });
 }
 
