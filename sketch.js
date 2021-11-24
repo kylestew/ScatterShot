@@ -1,5 +1,6 @@
 import { circle, asPolygon } from "@thi.ng/geom";
 import { sub } from "@thi.ng/vectors";
+import * as sdf from "./lib/sdf_2d";
 import { rayMarch } from "./lib/ray_march";
 import { Ray } from "./lib/ray";
 import * as dx from "./snod/drawer";
@@ -7,45 +8,59 @@ import * as dx from "./snod/drawer";
 const settings = {
   // animated: true,
   clearColor: "black",
+
+  rayCount: 8,
+
+  rayMarchMaxSteps: 12,
+  rayMarchMaxDist: 4.0,
+  rayMarchSurfDist: 0.0001,
 };
 
-// 1) Create a CIRCLE
-let circ = circle([0.0, 0.0], 0.2);
+// 1) Create one or more shapes
+const shapes = [sdf.circle([0, 0], 0.3)];
 
 // 2) Create N points of light
-let lights = [{ pt: [0.6, 0.4], cd: [1, 0, 0, 1] }];
+const lights = [
+  { pt: [-0.4, -0.6], cd: [1, 0, 0, 1] },
+  { pt: [0.6, 0.4], cd: [1, 0, 0, 1] },
+];
 
 // 3) Fire rays from point lights in all directions
 // a) draw rays in color of light
-// b) bounce rays that collide with CIRCLE and pick up their color
+// TODO: b) bounce rays that collide with CIRCLE and pick up their color
+function fireRays(light) {
+  // point lights fire rays in all directions
+  // create a circle and use points as directions
+  // (saves on some brain-thinking)
+  let poly = asPolygon(circle(light.pt, 0.1), settings.rayCount);
+  let rays = poly.points.map((pt) => {
+    // direction = point on circle - center of circle
+    return Ray(light.pt, sub([], pt, light.pt));
+  });
 
-let light = lights[0];
-let poly = asPolygon(circle(light.pt, 0.2), 36);
-let rays = poly.points.map((pt) => {
-  return Ray(light.pt, sub([], pt, light.pt));
-});
+  // fire from each ray and collect lines made
+  return rays.map((ray) => {
+    let rec = rayMarch(ray, shapes, settings);
+    return ray.lineTo(rec.dist);
+  });
+}
 
-console.log(rays[0].dir, rays[0].orig);
-console.log(rays[1].dir, rays[1].orig);
-console.log(rays[2].dir, rays[2].orig);
-console.log(rays[3].dir, rays[3].orig);
+let lines;
 
-let lines = rays.map((ray) => {
-  let rec = rayMarch(ray);
-  console.log(rec);
-  let line = ray.lineTo(rec.dist);
-  return line;
-});
-console.log(lines);
-
-function update() {}
+const update = function () {
+  lines = lights.flatMap(fireRays);
+};
 
 function render({ ctx, canvasScale }) {
-  ctx.strokeStyle = "white";
+  // ctx.strokeStyle = "#ffffff11";
+  ctx.strokeStyle = "#ffffff";
 
-  dx.circle(ctx, circ.pos, circ.r);
+  shapes.forEach((shape) => {
+    dx.circle(ctx, shape.pos, shape.r);
+  });
 
   lines.forEach((line) => {
+    console.log(line);
     let [a, b] = line.points;
     dx.line(ctx, a, b);
   });
