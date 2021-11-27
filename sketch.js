@@ -1,39 +1,47 @@
 import { circle, asPolygon, transform } from "@thi.ng/geom";
+import { fit } from "@thi.ng/math";
 import * as v from "@thi.ng/vectors";
 import * as m from "@thi.ng/matrices";
 import * as sdf from "./lib/sdf_2d";
-import { rayMarch } from "./lib/ray_march";
+import { recursiveRayMarch } from "./lib/ray_march";
 import { Ray } from "./lib/ray";
 import * as dx from "./snod/drawer";
 import { linspace } from "./snod/math";
 import { bounce } from "cli-spinners";
+import { line } from "@thi.ng/geom";
 
 const settings = {
   // animated: true,
   clearColor: "black",
 
-  rayCount: 256,
+  rayCount: 4096 * 2,
+  // rayCount: 24,
 
-  antiAliasFactor: 0.0,
+  antiAliasFactor: 0.001,
 
-  rayMarchMaxSteps: 32,
-  rayMarchMaxDist: 3.0,
-  rayMarchSurfDist: 0.001,
+  thetaOffset: Math.PI / 4.0,
+
+  rayMarchMaxSteps: 128,
+  rayMarchMaxDist: 4.0,
+  rayMarchSurfDist: 0.0001,
+
+  compositeMode: "screen",
+  // compositeMode: "lighten",
+  // compositeMode: "difference",
 };
 
 // 1) Create one or more shapes
 const shapes = [
-  sdf.circle([0, 0], 0.2),
-  // sdf.circle([-0.5, 0], 0.3),
-  // sdf.circle([0.5, 0], 0.3),
-  // sdf.circle([0, 0], 0.05),
+  sdf.circle([-0.6, 0.4], 0.25),
+  sdf.circle([0.6, 0.4], 0.25),
+  sdf.circle([0.0, -0.4], 0.25),
 ];
 
 // 2) Create N points of light
 const lights = [
-  { pt: [0.5, 0.5], cd: [0, 0.7, 0.8, 0.7] },
-  // { pt: [-0.3, -0.6], cd: [0, 0.7, 0.8, 0.7] },
-  // { pt: [0.3, 0.6], cd: [0, 0.8, 0.7, 0.7] },
+  { pt: [0.7, -0.4], cd: [0.2, 0.4, 0.9, 0.7] },
+  { pt: [-0.7, -0.4], cd: [0.2, 0.9, 0.4, 0.7] },
+  { pt: [0.0, 0.7], cd: [0.9, 0.4, 0.2, 0.7] },
 ];
 
 // 3) Fire rays from point lights in all directions
@@ -41,11 +49,13 @@ const lights = [
 // b) bounce rays that collide with CIRCLE and pick up their color
 function fireRays(light) {
   // create a set of unit points equally in all directions around center point
-  let thetaOffset = Math.PI / 4.0 - 0.1;
+  // let thetaOffset = Math.PI / 4.0 - 0.1;
   let points = linspace(0, 2 * Math.PI, settings.rayCount).map((theta) => {
+    let offset =
+      settings.antiAliasFactor * (Math.random() - 0.5) + settings.thetaOffset;
     return [
-      light.pt[0] + Math.cos(theta + thetaOffset),
-      light.pt[1] + Math.sin(theta + thetaOffset),
+      light.pt[0] + Math.cos(theta + offset),
+      light.pt[1] + Math.sin(theta + offset),
     ];
   });
 
@@ -56,40 +66,21 @@ function fireRays(light) {
       settings.antiAliasFactor * (Math.random() - 0.5),
       settings.antiAliasFactor * (Math.random() - 0.5),
     ]);
-
     return Ray(cent, v.sub([], pt, light.pt));
   });
 
-  // fire each ray and collect lines made
-  return rays.flatMap((ray) => {
-    let rec = rayMarch(ray, shapes, settings);
+  // fire each ray - returns hit records
+  const rayMarch = (ray) => recursiveRayMarch(ray, shapes, settings);
+  let hits = rays.flatMap(rayMarch);
 
-    let line = ray.lineTo(rec.dist);
-    line.attribs = {
-      cd: light.cd,
-    };
-
-    let lines = [line];
-
-    // TODO: HACK: display bounce
-    if (rec.hit === true) {
-      let { p, n } = rec;
-      let newDirection = Ray(p, n);
-      let bounceLine = newDirection.lineTo(0.24);
-      bounceLine.attribs = {
-        cd: [1, 0, 0, 1],
-      };
-      lines.push(bounceLine);
-    }
-
-    return lines;
-  });
+  // copy attrs from light to hit record
+  return hits.map((hit) => ({ ...hit, cd: light.cd }));
 }
 
-let lines;
+let hits;
 
 const update = function () {
-  lines = lights.flatMap(fireRays);
+  hits = lights.flatMap(fireRays);
 };
 
 function render({ ctx, canvasScale }) {
@@ -101,21 +92,25 @@ function render({ ctx, canvasScale }) {
     dx.circle(ctx, shape.pos, shape.r);
   });
 
-  lines.forEach((line) => {
-    let [a, b] = line.points;
+  ctx.fillStyle = "#ff000099";
+  lights.forEach((light) => {
+    dx.circle(ctx, light.pt, 0.01);
+  });
 
-    if (line.attribs.cd) {
-      let cd = line.attribs.cd.map((a) => {
+  ctx.globalCompositeOperation = settings.compositeMode;
+  hits.forEach((hit) => {
+    if (hit.cd) {
+      let cd = hit.cd.map((a) => {
         return a * 255;
       });
-      ctx.strokeStyle = `rgba(
-      ${cd[0]},
-      ${cd[1]},
-      ${cd[2]},
-      ${line.attribs.cd[3]})`;
+      let alpha = 1.0;
+      if (hit.depth >= 0) {
+        alpha = fit(hit.depth, 0, 4, 0.1, 0.01);
+      }
+      ctx.strokeStyle = `rgba( ${cd[0]}, ${cd[1]}, ${cd[2]}, ${alpha})`;
     }
 
-    dx.line(ctx, a, b);
+    if (hit.o && hit.p) dx.line(ctx, hit.o, hit.p);
   });
 }
 
