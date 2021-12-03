@@ -4,6 +4,7 @@ import { settings, update, render } from "./sketch";
 
 let ctx, stats;
 let canvasScale, canvasXOff, canvasYOff;
+let mediaRecorder;
 
 function resetCanvas() {
   ctx.canvas.width = window.innerWidth;
@@ -29,6 +30,37 @@ function normalizeCanvas() {
   ctx.scale(1, -1);
   ctx.strokeWidth(1.0);
   ctx.lineJoin = "round";
+}
+
+function download(dataURL, name) {
+  const link = document.createElement("a");
+  link.href = dataURL;
+  link.download = name;
+  link.click();
+}
+
+function downloadCanvas() {
+  var dataURL = ctx.canvas.toDataURL("image/png");
+  download(dataURL, "image");
+}
+
+function startRecording() {
+  let videoStream, recordedChunks;
+  videoStream = canvas.captureStream(30);
+  var options = { mimeType: "video/webm; codecs=vp9" };
+  mediaRecorder = new MediaRecorder(videoStream, options);
+  recordedChunks = [];
+  mediaRecorder.ondataavailable = function (event) {
+    if (event.data.size > 0) {
+      recordedChunks.push(event.data);
+      var blob = new Blob(recordedChunks, { type: "video/webm" });
+      var videoURL = URL.createObjectURL(blob);
+      download(videoURL, "video");
+      recordedChunks = [];
+    }
+  };
+  mediaRecorder.start();
+  console.log("recording...");
 }
 
 function init() {
@@ -79,4 +111,16 @@ window.onload = function () {
 
 window.onresize = function () {
   resetCanvas();
+};
+
+window.onkeydown = function (evt) {
+  if (evt.key == "s") {
+    downloadCanvas();
+  } else if (evt.key == "r") {
+    if (mediaRecorder.state == "recording") {
+      mediaRecorder.stop();
+    } else {
+      startRecording();
+    }
+  }
 };

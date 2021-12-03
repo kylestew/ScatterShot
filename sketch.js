@@ -15,7 +15,6 @@ const settings = {
   clearColor: "black",
 
   rayCount: 4096 * 2,
-  // rayCount: 24,
 
   antiAliasFactor: 0.001,
 
